@@ -1,4 +1,5 @@
 #!/usr/bin/python -u
+# -*- coding: utf-8 -*-
 
 """
 Copyright 2016 Jake Wharton
@@ -21,6 +22,7 @@ import os
 import subprocess
 import sys
 import urllib2
+from multiprocessing import Pool
 
 __version__ = '1.0.0'
 
@@ -82,10 +84,17 @@ for sdk_m2_repo in sdk_m2_repos:
                     and not artifact_name.endswith('-javadoc'):
                 artifact_file = os.path.join(dir_path, file_name)
                 relative_file = os.path.relpath(artifact_file, sdk_m2_repo)
+
+                split = os.path.normpath(relative_file).split(os.sep)
+                group_id = '.'.join(split[:-3])
+                artifact_id = split[-3]
+                version = split[-2]
+
                 artifact = {
                     'file': artifact_file,
                     'relative_file': relative_file,
                     'pom': os.path.join(dir_path, artifact_name + '.pom'),
+                    'coordinates': '%s:%s:%s' % (group_id, artifact_id, version)
                 }
 
                 artifact_sources = os.path.join(dir_path, artifact_name + '-sources.jar')
@@ -101,10 +110,12 @@ for sdk_m2_repo in sdk_m2_repos:
                 sdk_artifacts.append(artifact)
 
                 if verbose:
-                    print 'Found %s' % relative_file
-                    print '  Repo: %s' % sdk_m2_repo
-                    print '  Sources: %s' % has_sources
-                    print '  Javadoc: %s' % has_javadoc
+                    print 'Found %s' % artifact_file,
+                    if has_sources:
+                        print '+Sources',
+                    if has_javadoc:
+                        print '+Javadoc',
+                    print
                 else:
                     print '\rLoading %s artifacts from your local SDK...' % len(sdk_artifacts),
 
@@ -118,25 +129,37 @@ class HeadRequest(urllib2.Request):
         return 'HEAD'
 
 
-missing_artifacts = []
-for index, sdk_artifact in enumerate(sdk_artifacts):
+def remote_has_artifact(sdk_artifact):
     relative_file = sdk_artifact['relative_file']
-    if verbose:
-        print '[%s/%s] Checking %s...' % (index + 1, len(sdk_artifacts), relative_file),
-    else:
-        print '\rChecking %s of %s artifacts on remote...' % (index + 1, len(sdk_artifacts)),
+    url = repo_url + relative_file
+
     try:
-        if urllib2.urlopen(HeadRequest(repo_url + relative_file)).getcode() == 200:
+        if urllib2.urlopen(HeadRequest(url)).getcode() == 200:
             if verbose:
-                print 'Found!'
-            continue
+                print 'Checking for %s... Found!' % relative_file
+            else:
+                sys.stdout.write('.')
+            return None
     except urllib2.HTTPError:
         pass
-    if verbose:
-        print 'Missing!'
-    missing_artifacts.append(sdk_artifact)
 
-print '\r%s of %s artifacts missing from remote.            ' % (len(missing_artifacts), len(sdk_artifacts))
+    if verbose:
+        print 'Checking for %s... Missing!' % relative_file
+    else:
+        sys.stdout.write(u'✗')
+    return sdk_artifact
+
+
+if not verbose:
+    print 'Checking for %s artifacts on remote...' % len(sdk_artifacts),
+pool = Pool(20)
+missing_artifacts = []
+pool.map_async(remote_has_artifact, sdk_artifacts, callback=missing_artifacts.extend).wait(999999)
+missing_artifacts = filter(lambda x: x is not None, missing_artifacts)
+
+if not verbose:
+    print
+print '%s of %s artifacts missing from remote.' % (len(missing_artifacts), len(sdk_artifacts))
 if verbose:
     print
 
@@ -156,15 +179,17 @@ for index, missing_artifact in enumerate(missing_artifacts):
         cmd.append('-Djavadoc=' + missing_artifact['javadoc'])
 
     if verbose:
-        print '[%s/%s] Command: %s' % (index + 1, len(missing_artifacts), ' '.join(cmd))
-    else:
-        print '\rDeploying %s of %s artifacts to remote repository...' % (index + 1, len(missing_artifacts)),
+        print 'Command: %s' % ' '.join(cmd)
+    print '[%s / %s] Deploying %s...' % (index + 1, len(missing_artifacts), missing_artifact['coordinates']),
 
     if not dry_run:
         if verbose:
             subprocess.check_call(cmd)
         else:
             subprocess.check_output(cmd)
+        print 'Done!'
+    else:
+        print 'Skipped!'
 
-print '\rDeployed %s artifacts to remote repository...            ' % len(missing_artifacts)
-print 'Done!'
+if not dry_run:
+    print 'Deployed %s artifacts.' % len(missing_artifacts)
