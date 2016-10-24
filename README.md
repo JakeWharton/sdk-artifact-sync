@@ -9,7 +9,7 @@ mechanism. Google, however, continues to ignore this standard distribution mecha
 its use for their other open source projects and other official product libraries. Android developers are required to
 use their bespoke SDK manager for downloading entire Maven repositories as one giant artifact on every machine.
 
-This script unburdens you from this mechanism and instead synchronizes these artifacts to a remote artifact host of your
+This script unburdens you from their mechanism and instead synchronizes these artifacts to a remote artifact host of your
 choice. This will allow your build tools to resolve and cache these artifacts automatically.
 
 
