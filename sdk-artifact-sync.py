@@ -18,10 +18,12 @@ limitations under the License.
 """
 
 import argparse
+import base64
 import os
 import subprocess
 import sys
 import urllib2
+import xml.etree.ElementTree as ElementTree
 from multiprocessing import Pool
 
 __version__ = '1.0.0'
@@ -73,6 +75,16 @@ if len(sdk_m2_repos) == 0:
     sys.exit(1)
 if verbose:
     print 'Actual SDK m2repository folders:\n  %s' % '\n  '.join(sdk_m2_repos)
+
+auth_base64 = ''
+settings_file = os.path.join(os.path.expanduser('~') , '.m2', 'settings.xml')
+mvn_settings = ElementTree.parse(settings_file).getroot()
+for server_config in mvn_settings.iterfind('servers/server'):
+    if server_config.find('id').text == repo_id:
+        username = server_config.find('username').text
+        password = server_config.find('password').text
+        auth_base64 = base64.b64encode('%s:%s' % (username, password))
+        break
 
 sdk_artifacts = []
 for sdk_m2_repo in sdk_m2_repos:
@@ -132,9 +144,11 @@ class HeadRequest(urllib2.Request):
 def remote_has_artifact(sdk_artifact):
     relative_file = sdk_artifact['relative_file']
     url = repo_url + relative_file
-
+    request = HeadRequest(url)
+    if auth_base64:
+        request.add_header("Authorization", "Basic %s" % auth_base64)
     try:
-        if urllib2.urlopen(HeadRequest(url)).getcode() == 200:
+        if urllib2.urlopen(request).getcode() == 200:
             if verbose:
                 print 'Checking for %s... Found!' % relative_file
             else:
