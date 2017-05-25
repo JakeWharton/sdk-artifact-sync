@@ -13,6 +13,12 @@ This script unburdens you from their mechanism and instead synchronizes these ar
 choice. This will allow your build tools to resolve and cache these artifacts automatically.
 
 
+Deprecated!
+-----------
+
+Google launched maven.google.com which will be the future home of all artifacts: https://androidstudio.googleblog.com/2017/05/android-studio-30-canary-1-sdk-updates.html.
+
+
 Usage
 -----
 
